@@ -1,0 +1,130 @@
+---
+title: "R Assignment - Practical Machine Learning Week 4"
+author: 'N'
+date: "July 17, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(root.dir="C:/Nick/07 R/R User Notes/Practical Machine Learning/Assignment",echo = TRUE)
+```
+
+
+## Data Preparation
+
+We need to use the training set to create a classification of the "classe" variable and apply it to the testing set.
+
+Set up codes needed and the local space
+```{r set up profile_1}
+library(caret); library(ggplot2); 
+```
+```{r set up profile_2, eval=FALSE}
+setwd("C:/Nick/07 R/R User Notes/Practical Machine Learning/Assignment")
+```
+
+Now import the two initial datasets:
+```{r readsets}
+inSet<-read.csv("C:/Nick/07 R/R User Notes/Practical Machine Learning/Assignment/3pml-training.csv")
+outSet<-read.csv("C:/Nick/07 R/R User Notes/Practical Machine Learning/Assignment/4pml-testing.csv")
+```
+
+Take a look at the intitial data
+
+```{r checklevels, eval=FALSE}
+head(inSet)
+```
+
+__Keep only variables that are not blank or NA. Classe is the response variable to model.__
+Some variables are very low response and correlated with the "New_window" variable.
+We can filter the records later to see if the prediction improves.  This is since the test set does not include any of the additional data
+
+```{r select columns}
+inSet1<-inSet[,c(6:7,8:11, 37:49, 60:68,84:86,102,113:124,140,151:160)]
+t_<-colnames(inSet1)
+t_	#check the columns required are included
+```
+
+Create some plots of the variables to see the kind of pre-processing required
+
+Rotating through the variable numbers to see if there was anything interesting (only made it through the first 7 :)
+
+```{R plot1}
+plot(inSet1$classe,inSet1[,3],pch=19,cex=0.5)	
+```
+
+The above plot shows skew in the data that needs to be resolved.
+```{r plot2}
+qplot(inSet1$classe,inSet1[,3],data=inSet1) 
+```
+
+__As an example item 3 "roll_belt" shows skew in the data.  We need to centralise the data and scale prior to modelling.__
+
+Now create the test and train sets for analysis:
+```{r create train and test sets, eval=FALSE}
+set.seed(32343)						#set sampling seed...
+inTrain<-createDataPartition(y=inSet1$classe,p=0.75,list=FALSE)	#split the data set around 75/25
+training<-inSet1[inTrain,]					#create train dataset
+testing<-inSet1[-inTrain,]					#create test dataset
+dim(training); dim(testing);					#assess the sample data
+```
+
+Training set of 55 columns (including Classe response variable) and test set.
+
+Filter the data for the "new_window" variable to create a 'simpler' version of the data without the sparse information:
+
+```{r filter for spurious data, eval=FALSE}
+training_filter<-training[training[,1]=="no",]
+testing_filter<-testing[testing[,1]=="no",]
+dim(training_filter); dim(testing_filter);
+```
+Not much data removed, the models may be quite similar.
+
+##Modelling
+
+Given the supervised classification, I have selected the GBM model structure.  An alternative could be random forrest, but i believe weak learners of a GBM will treat the finer grade boundaries of the continous data very well.  RF or alternative methods could be tried if the GBM does not perform well. 
+
+Version 1: GBM Full data: centre and scale pre-processing
+```{r full GBM model, eval=FALSE}
+mod1_full<-train(classe~.,data=training,preProcess=c("center","scale"),method="gbm")	
+```
+
+Version 2: Filter the input data to see if this creates a difference
+```{r filtered GBM model, eval=FALSE}
+mod1_filter<-train(classe~.,data=training,preProcess=c("center","scale"),method="gbm")	
+```
+
+Create the predictions
+```{r predict back on thetest set, eval=FALSE}
+pred1_full<-predict(testing,mod1_full$finalModel)
+pred1_full<-predict(mod1_full,testing)
+pred1_filter<-predict(mod1_filter,testing_filter)
+```
+
+Run the confusion matrix
+```{r consufion matrix, eval=FALSE}
+confusionMatrix(pred1_full,testing$classe)
+confusionMatrix(pred1_filter,testing_filter$classe)
+```
+
+#Results
+
+__The results show <span style="color:red">0.988</span> accuracy for the full model, and <span style="color:red">0.9875</span> for the filtered.__
+
+Either should be good enough for our output but I will use the filtered as it looks most like the testing set.
+
+Apply the final predictions to the test set for both the full and the filtered models:
+```{r final answers, eval=FALSE}
+ANSWERS<-predict(mod1_full,outSet)
+ANSWERS_filter<-predict(mod1_filter,outSet)
+ANSWERS
+ANSWERS_filter
+```
+
+##Conclusion
+In practice the answers are the same with neach model and wecould have anticipated this =>
+
+1) Given the 98% accuracy of both models on the test portion of the training set, on a sample of 20 we could expect above 19/20 correct in each case.
+
+2) The additional sparse data is a very small portion of the full model.  It will have little influense on the modelling structure and as a result will still train well on data that does not contain the additional information.
+
+__Our final model was 20/20 accurate on the validation test suggesting either model is ok.  GBM is a reasonable choice and the pre-processing was appropriate.__
